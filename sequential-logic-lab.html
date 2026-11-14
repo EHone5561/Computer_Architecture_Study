@@ -1,0 +1,1193 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>컴퓨터구조 시뮬레이터</title>
+<style>
+:root {
+  --bg: #05060a; --panel: #0b0d14; --panel-2: #10131c; --ink: #e8ecf5; --muted: #8a93a8; --line: #1d2230;
+  --on: #2ef2ff; --on-glow: rgba(46, 242, 255, .55); --on-soft: rgba(46, 242, 255, .08);
+  --off: #2b3142; --gate: #7d879e; --gate-fill: #0b0d14;
+  --hot: #ff3df5; --hot-glow: rgba(255, 61, 245, .5); --hot-soft: rgba(255, 61, 245, .08);
+  --bad: #ff4d7a; --bad-soft: rgba(255, 77, 122, .1);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; color: var(--ink); min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(46, 242, 255, .07), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(255, 61, 245, .06), transparent 60%),
+    var(--bg);
+  font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.tab {
+  font: inherit; font-weight: 700; letter-spacing: .01em; border: 1px solid var(--line); background: var(--panel);
+  color: var(--muted); border-radius: 999px; padding: 7px 16px; cursor: pointer; transition: color .15s, border-color .15s, box-shadow .15s;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--hot); border-color: var(--hot); box-shadow: 0 0 14px var(--hot-glow), inset 0 0 10px var(--hot-soft); text-shadow: 0 0 8px var(--hot-glow); }
+
+section.stage {
+  display: none; background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line); border-radius: 16px; padding: 18px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .02) inset, 0 20px 60px rgba(0, 0, 0, .6);
+}
+section.stage.active { display: block; }
+
+svg.diagram { width: 100%; height: auto; display: block; }
+.wire { fill: none; stroke: var(--off); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; transition: stroke .15s, filter .15s; }
+.wire.on { stroke: var(--on); filter: drop-shadow(0 0 4px var(--on-glow)) drop-shadow(0 0 10px var(--on-glow)); }
+.dot { fill: var(--off); } .dot.on { fill: var(--on); filter: drop-shadow(0 0 6px var(--on-glow)); }
+.gate { fill: var(--gate-fill); stroke: var(--gate); stroke-width: 2; }
+.gtext { fill: var(--muted); font-size: 11px; font-family: Consolas, monospace; letter-spacing: .05em; }
+.lbl { fill: var(--ink); font-size: 15px; font-weight: 700; font-family: Consolas, monospace; }
+.val { font-size: 13px; font-weight: 700; fill: var(--muted); font-family: Consolas, monospace; }
+.val.on { fill: var(--on); filter: drop-shadow(0 0 4px var(--on-glow)); }
+.box { fill: var(--gate-fill); stroke: var(--gate); stroke-width: 1.5; transition: fill .15s, stroke .15s, filter .15s; }
+.box.sel { fill: #0a2128; stroke: var(--on); }
+.box.write { stroke: var(--hot); stroke-width: 3; filter: drop-shadow(0 0 8px var(--hot-glow)); }
+.big { font-size: 22px; font-weight: 800; fill: #4a526a; font-family: Consolas, monospace; }
+.big.on { fill: var(--on); filter: drop-shadow(0 0 6px var(--on-glow)); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+.bit {
+  font: inherit; font-family: Consolas, "Malgun Gothic", monospace; font-weight: 700;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  border-radius: 10px; padding: 7px 12px; cursor: pointer; min-width: 76px; display: inline-flex; gap: 8px; align-items: center; justify-content: center;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.bit:hover { border-color: #39405a; }
+.bit .v { font-weight: 800; font-size: 1.05rem; color: var(--muted); }
+.bit[aria-pressed="true"] { border-color: var(--on); background: var(--on-soft); box-shadow: 0 0 12px var(--on-glow), inset 0 0 8px var(--on-soft); }
+.bit[aria-pressed="true"] .v { color: var(--on); text-shadow: 0 0 8px var(--on-glow); }
+.btn {
+  font: inherit; font-weight: 700; border: 1px solid var(--hot); background: var(--hot-soft); color: var(--hot);
+  border-radius: 10px; padding: 7px 12px; cursor: pointer; transition: box-shadow .15s;
+}
+.btn:hover:not(:disabled) { box-shadow: 0 0 14px var(--hot-glow); }
+.btn:disabled, .bit:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+.bit:focus-visible, .btn:focus-visible, .tab:focus-visible { outline: 2px solid var(--hot); outline-offset: 3px; }
+.sep { width: 1px; height: 28px; background: var(--line); margin: 0 2px; }
+
+.status {
+  margin-top: 14px; padding: 10px 14px; border-radius: 10px; font-size: 0.95rem;
+  font-family: Consolas, "Malgun Gothic", monospace; color: var(--on);
+  background: rgba(0, 0, 0, .35); border: 1px solid rgba(46, 242, 255, .25); text-shadow: 0 0 8px var(--on-glow);
+}
+.status.warn { color: var(--bad); border-color: rgba(255, 77, 122, .4); background: var(--bad-soft); text-shadow: 0 0 8px rgba(255, 77, 122, .5); }
+
+/* waveforms */
+.wave { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.wave-clk { stroke: #c9d1e3; }
+.wave-d { stroke: var(--on); filter: drop-shadow(0 0 4px var(--on-glow)); }
+.wave-q { stroke: var(--hot); filter: drop-shadow(0 0 4px var(--hot-glow)); }
+.wave-l { stroke: var(--muted); stroke-dasharray: 5 3; }
+
+/* FSM */
+.st { fill: var(--gate-fill); stroke: var(--gate); stroke-width: 2; transition: fill .2s, stroke .2s, filter .2s; }
+.st.cur { fill: #0a2128; stroke: var(--on); stroke-width: 3; filter: drop-shadow(0 0 10px var(--on-glow)); }
+.stname { fill: var(--ink); font: 800 18px Consolas, monospace; }
+.stcode { fill: var(--muted); font: 700 12px Consolas, monospace; }
+.arc { fill: none; stroke: var(--off); stroke-width: 2.5; transition: stroke .2s, filter .2s; }
+.arc.next { stroke: var(--hot); filter: drop-shadow(0 0 6px var(--hot-glow)); }
+.arclbl { fill: var(--muted); font: 700 13px Consolas, monospace; }
+.arclbl.next { fill: var(--hot); }
+#ah { fill: var(--off); } #ahn { fill: var(--hot); }
+.lamp { fill: #151925; stroke: #262c3c; stroke-width: 1.5; transition: fill .2s, filter .2s; }
+.lamp.r.lit { fill: #ff3b5c; filter: drop-shadow(0 0 10px rgba(255, 59, 92, .8)); }
+.lamp.y.lit { fill: #ffd23d; filter: drop-shadow(0 0 10px rgba(255, 210, 61, .8)); }
+.lamp.g.lit { fill: #39ff88; filter: drop-shadow(0 0 10px rgba(57, 255, 136, .8)); }
+.bus { fill: none; stroke: var(--gate); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: .55; transition: stroke .2s, opacity .2s; }
+.bus.pending { stroke: var(--hot); opacity: 1; filter: drop-shadow(0 0 6px var(--hot-glow)); }
+.busval { fill: var(--on); font: 800 14px Consolas, monospace; }
+.busval.pending { fill: var(--hot); }
+.box.flash { stroke: var(--on); stroke-width: 3; filter: drop-shadow(0 0 12px var(--on-glow)); }
+.regbits { fill: var(--on); font: 800 26px Consolas, monospace; filter: drop-shadow(0 0 6px var(--on-glow)); }
+
+/* chapters + lecture 2 */
+[hidden] { display: none !important; }
+.chapters { display: flex; gap: 18px; margin-bottom: 12px; padding-left: 4px; }
+.chap { font: inherit; font-size: 1.05rem; font-weight: 800; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 4px 2px; cursor: pointer; }
+.chap:hover { color: var(--ink); }
+.chap[aria-selected="true"] { color: var(--on); border-bottom-color: var(--on); text-shadow: 0 0 10px var(--on-glow); }
+.chap:focus-visible { outline: 2px solid var(--hot); outline-offset: 3px; }
+.wire.z { stroke: var(--muted); stroke-dasharray: 6 6; filter: none; }
+.wire.pend { stroke: var(--hot); stroke-dasharray: 4 5; filter: none; }
+.wire.conflict { stroke: var(--bad); stroke-dasharray: none; filter: drop-shadow(0 0 6px rgba(255, 77, 122, .7)); }
+.val.bad { fill: var(--bad); } .val.pendv { fill: var(--hot); }
+.lev { stroke: var(--off); stroke-width: 3.5; stroke-linecap: round; }
+[data-sw].on .lev { stroke: var(--ink); }
+[data-sw].on .lev-off, [data-sw]:not(.on) .lev-on { display: none; }
+.term { fill: var(--gate); }
+.swst { font: 800 12px Consolas, monospace; fill: var(--muted); }
+.swst.on { fill: var(--on); }
+.bigval { font: 800 20px Consolas, monospace; fill: var(--ink); }
+.bigval.on { fill: var(--on); } .bigval.bad { fill: var(--bad); }
+.fabox { fill: var(--gate-fill); stroke: var(--gate); stroke-width: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="chapters" role="tablist" aria-label="강의">
+    <button class="chap" data-ch="2">2강 조합논리</button>
+    <button class="chap" data-ch="3">3강 순차논리</button>
+  </div>
+  <nav class="tabs" role="tablist" data-ch="2">
+    <button class="tab" role="tab" data-go="7">CMOS 게이트</button>
+    <button class="tab" role="tab" data-go="8">기본 게이트</button>
+    <button class="tab" role="tab" data-go="9">디코더</button>
+    <button class="tab" role="tab" data-go="10">MUX</button>
+    <button class="tab" role="tab" data-go="11">전가산기</button>
+    <button class="tab" role="tab" data-go="12">4비트 가산기</button>
+    <button class="tab" role="tab" data-go="13">비교기</button>
+    <button class="tab" role="tab" data-go="14">트라이스테이트</button>
+  </nav>
+  <nav class="tabs" role="tablist" data-ch="3">
+    <button class="tab" role="tab" data-go="0">R-S 래치</button>
+    <button class="tab" role="tab" data-go="1">Gated D 래치</button>
+    <button class="tab" role="tab" data-go="2">레지스터</button>
+    <button class="tab" role="tab" data-go="3">메모리</button>
+    <button class="tab" role="tab" data-go="4">D 플립플롭</button>
+    <button class="tab" role="tab" data-go="5">FF 레지스터</button>
+    <button class="tab" role="tab" data-go="6">FSM 신호등</button>
+  </nav>
+
+  <section class="stage" id="stage0">
+    <svg class="diagram" id="svg-rs" viewBox="0 0 500 250" role="img" aria-label="R-S 래치"></svg>
+    <div class="controls">
+      <button class="bit" id="rs-S">S <span class="v">1</span></button>
+      <button class="bit" id="rs-R">R <span class="v">1</span></button>
+      <span class="sep"></span>
+      <button class="btn" id="rs-release" disabled>S·R 동시에 1로</button>
+    </div>
+    <div class="status" id="rs-status"></div>
+  </section>
+
+  <section class="stage" id="stage1">
+    <svg class="diagram" id="svg-d" viewBox="0 0 650 250" role="img" aria-label="Gated D 래치"></svg>
+    <div class="controls">
+      <button class="bit" id="d-D">D <span class="v">0</span></button>
+      <button class="bit" id="d-WE">WE <span class="v">0</span></button>
+    </div>
+    <div class="status" id="d-status"></div>
+  </section>
+
+  <section class="stage" id="stage2">
+    <svg class="diagram" id="svg-reg" viewBox="0 0 640 250" role="img" aria-label="4비트 레지스터"></svg>
+    <div class="controls">
+      <button class="bit" id="r-D3">D3 <span class="v">0</span></button>
+      <button class="bit" id="r-D2">D2 <span class="v">0</span></button>
+      <button class="bit" id="r-D1">D1 <span class="v">0</span></button>
+      <button class="bit" id="r-D0">D0 <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="r-WE">WE <span class="v">0</span></button>
+      <button class="btn" id="r-pulse">쓰기 펄스</button>
+    </div>
+    <div class="status" id="r-status"></div>
+  </section>
+
+  <section class="stage" id="stage3">
+    <svg class="diagram" id="svg-mem" viewBox="0 0 640 400" role="img" aria-label="4×3 메모리"></svg>
+    <div class="controls">
+      <button class="bit" id="m-A1">Addr[1] <span class="v">0</span></button>
+      <button class="bit" id="m-A0">Addr[0] <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="m-Di2">Di[2] <span class="v">0</span></button>
+      <button class="bit" id="m-Di1">Di[1] <span class="v">0</span></button>
+      <button class="bit" id="m-Di0">Di[0] <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="m-WE">WE <span class="v">0</span></button>
+      <button class="btn" id="m-pulse">쓰기 펄스</button>
+    </div>
+    <div class="status" id="m-status"></div>
+  </section>
+
+  <section class="stage" id="stage-ff">
+    <svg class="diagram" id="svg-ff" viewBox="0 0 640 260" role="img" aria-label="D 래치 두 개로 만든 D 플립플롭"></svg>
+    <svg class="diagram" id="svg-wave" viewBox="0 0 640 196" role="img" aria-label="CLK, D, Q 타이밍 파형" style="margin-top:6px"></svg>
+    <div class="controls">
+      <button class="bit" id="ff-D">D <span class="v">0</span></button>
+      <button class="bit" id="ff-CLK">CLK <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="ff-auto">자동 클록 <span class="v">0</span></button>
+    </div>
+    <div class="status" id="ff-status"></div>
+  </section>
+
+  <section class="stage" id="stage-ffreg">
+    <svg class="diagram" id="svg-fr" viewBox="0 0 640 290" role="img" aria-label="D 플립플롭 4개로 만든 4비트 레지스터"></svg>
+    <svg class="diagram" id="svg-frw" viewBox="0 0 640 112" role="img" aria-label="CLK, D[3:0], Q[3:0] 파형" style="margin-top:6px"></svg>
+    <div class="controls">
+      <button class="bit" id="fr-D3">D3 <span class="v">0</span></button>
+      <button class="bit" id="fr-D2">D2 <span class="v">0</span></button>
+      <button class="bit" id="fr-D1">D1 <span class="v">0</span></button>
+      <button class="bit" id="fr-D0">D0 <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="fr-CLK">CLK <span class="v">0</span></button>
+      <button class="bit" id="fr-auto">자동 클록 <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="fr-cnt">D ← Q+1 <span class="v">0</span></button>
+      <button class="btn" id="fr-reset">Reset</button>
+    </div>
+    <div class="status" id="fr-status"></div>
+  </section>
+
+  <section class="stage" id="stage4">
+    <svg class="diagram" id="svg-fsm" viewBox="0 0 640 540" role="img" aria-label="교통신호 제어기 FSM"></svg>
+    <div class="controls">
+      <button class="bit" id="f-TA">TA <span class="v">0</span></button>
+      <button class="bit" id="f-TB">TB <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="btn" id="f-clk">CLK ↑</button>
+      <button class="bit" id="f-auto">자동 <span class="v">0</span></button>
+      <button class="btn" id="f-reset">Reset</button>
+    </div>
+    <div class="status" id="f-status"></div>
+  </section>
+
+  <!-- ================= Lecture 2: combinational ================= -->
+  <section class="stage" id="c2-cmos">
+    <svg class="diagram" id="svg-cnot" viewBox="0 0 640 300" role="img" aria-label="CMOS 인버터"></svg>
+    <svg class="diagram" id="svg-cnand" viewBox="0 0 640 340" role="img" aria-label="CMOS NAND 게이트" hidden></svg>
+    <div class="controls">
+      <button class="tab" data-cmode="not">NOT</button>
+      <button class="tab" data-cmode="nand">NAND</button>
+      <span class="sep"></span>
+      <button class="bit" id="cm-A">A <span class="v">0</span></button>
+      <button class="bit" id="cm-B">B <span class="v">0</span></button>
+    </div>
+    <div class="status" id="cm-status"></div>
+  </section>
+
+  <section class="stage" id="c2-gates">
+    <svg class="diagram" id="svg-gates" viewBox="0 0 640 300" role="img" aria-label="기본 논리 게이트 8종"></svg>
+    <div class="controls">
+      <button class="bit" id="g-A">A <span class="v">0</span></button>
+      <button class="bit" id="g-B">B <span class="v">0</span></button>
+    </div>
+    <div class="status" id="g-status"></div>
+  </section>
+
+  <section class="stage" id="c2-dec">
+    <svg class="diagram" id="svg-dec" viewBox="0 0 640 345" role="img" aria-label="2-to-4 디코더"></svg>
+    <div class="controls">
+      <button class="bit" id="dc-A">A <span class="v">0</span></button>
+      <button class="bit" id="dc-B">B <span class="v">0</span></button>
+    </div>
+    <div class="status" id="dc-status"></div>
+  </section>
+
+  <section class="stage" id="c2-mux">
+    <svg class="diagram" id="svg-mux2" viewBox="0 0 640 280" role="img" aria-label="2:1 MUX"></svg>
+    <svg class="diagram" id="svg-mux4" viewBox="0 0 640 345" role="img" aria-label="4:1 MUX" hidden></svg>
+    <div class="controls">
+      <button class="tab" data-mmode="2">2:1</button>
+      <button class="tab" data-mmode="4">4:1</button>
+      <span class="sep"></span>
+      <span id="mx2-ctl" style="display:contents">
+        <button class="bit" id="mx-A">A <span class="v">0</span></button>
+        <button class="bit" id="mx-B">B <span class="v">0</span></button>
+        <button class="bit" id="mx-S">S <span class="v">0</span></button>
+      </span>
+      <span id="mx4-ctl" style="display:contents" hidden>
+        <button class="bit" id="mx-D0">D0 <span class="v">0</span></button>
+        <button class="bit" id="mx-D1">D1 <span class="v">0</span></button>
+        <button class="bit" id="mx-D2">D2 <span class="v">0</span></button>
+        <button class="bit" id="mx-D3">D3 <span class="v">0</span></button>
+        <button class="bit" id="mx-S1">S1 <span class="v">0</span></button>
+        <button class="bit" id="mx-S0">S0 <span class="v">0</span></button>
+      </span>
+    </div>
+    <div class="status" id="mx-status"></div>
+  </section>
+
+  <section class="stage" id="c2-fa">
+    <svg class="diagram" id="svg-fa" viewBox="0 0 640 330" role="img" aria-label="전가산기"></svg>
+    <div class="controls">
+      <button class="bit" id="fa-A">A <span class="v">0</span></button>
+      <button class="bit" id="fa-B">B <span class="v">0</span></button>
+      <button class="bit" id="fa-C">Cin <span class="v">0</span></button>
+    </div>
+    <div class="status" id="fa-status"></div>
+  </section>
+
+  <section class="stage" id="c2-add4">
+    <svg class="diagram" id="svg-add4" viewBox="0 0 640 280" role="img" aria-label="4비트 리플 캐리 가산기"></svg>
+    <div class="controls">
+      <button class="bit" id="ad-A3">A3 <span class="v">0</span></button>
+      <button class="bit" id="ad-A2">A2 <span class="v">0</span></button>
+      <button class="bit" id="ad-A1">A1 <span class="v">0</span></button>
+      <button class="bit" id="ad-A0">A0 <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="ad-B3">B3 <span class="v">0</span></button>
+      <button class="bit" id="ad-B2">B2 <span class="v">0</span></button>
+      <button class="bit" id="ad-B1">B1 <span class="v">0</span></button>
+      <button class="bit" id="ad-B0">B0 <span class="v">0</span></button>
+    </div>
+    <div class="status" id="ad-status"></div>
+  </section>
+
+  <section class="stage" id="c2-cmp">
+    <svg class="diagram" id="svg-cmp" viewBox="0 0 640 320" role="img" aria-label="4비트 비교기"></svg>
+    <div class="controls">
+      <button class="bit" id="cp-A3">A3 <span class="v">0</span></button>
+      <button class="bit" id="cp-A2">A2 <span class="v">0</span></button>
+      <button class="bit" id="cp-A1">A1 <span class="v">0</span></button>
+      <button class="bit" id="cp-A0">A0 <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="cp-B3">B3 <span class="v">0</span></button>
+      <button class="bit" id="cp-B2">B2 <span class="v">0</span></button>
+      <button class="bit" id="cp-B1">B1 <span class="v">0</span></button>
+      <button class="bit" id="cp-B0">B0 <span class="v">0</span></button>
+    </div>
+    <div class="status" id="cp-status"></div>
+  </section>
+
+  <section class="stage" id="c2-tri">
+    <svg class="diagram" id="svg-tri" viewBox="0 0 640 290" role="img" aria-label="트라이스테이트 버퍼로 공유하는 버스"></svg>
+    <div class="controls">
+      <button class="bit" id="tr-cd">CPU 데이터 <span class="v">0</span></button>
+      <button class="bit" id="tr-ce">CPU E <span class="v">0</span></button>
+      <span class="sep"></span>
+      <button class="bit" id="tr-md">메모리 데이터 <span class="v">0</span></button>
+      <button class="bit" id="tr-me">메모리 E <span class="v">0</span></button>
+    </div>
+    <div class="status" id="tr-status"></div>
+  </section>
+</div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const b = (v) => (v ? 1 : 0);
+
+/* ---------- SVG helpers ---------- */
+const nandGate = (x, y) =>
+  `<path class="gate" d="M${x} ${y} H${x + 35} A30 30 0 0 1 ${x + 35} ${y + 60} H${x} Z"/><circle class="gate" cx="${x + 71}" cy="${y + 30}" r="6"/>`;
+const inverter = (x, y) =>
+  `<path class="gate" d="M${x} ${y - 11} L${x} ${y + 11} L${x + 19} ${y} Z"/><circle class="gate" cx="${x + 23}" cy="${y}" r="4"/>`;
+const wire = (id, d) => `<path class="wire" data-w="${id}" d="${d}"/>`;
+const dot = (id, x, y) => `<circle class="dot" data-w="${id}" cx="${x}" cy="${y}" r="4.5"/>`;
+const val = (id, x, y, anchor = "start") => `<text class="val" data-v="${id}" x="${x}" y="${y}" text-anchor="${anchor}">0</text>`;
+const text = (x, y, s, cls = "lbl", anchor = "start") => `<text class="${cls}" x="${x}" y="${y}" text-anchor="${anchor}">${s}</text>`;
+
+function setSig(svg, map) {
+  for (const [k, v] of Object.entries(map)) {
+    $$(`[data-w="${k}"]`, svg).forEach((el) => el.classList.toggle("on", !!v));
+    $$(`[data-v="${k}"]`, svg).forEach((el) => { el.textContent = b(v); el.classList.toggle("on", !!v); });
+  }
+}
+function status(id, html, warn = false) { const el = $(id); el.innerHTML = html; el.classList.toggle("warn", warn); }
+
+/* R-S core: gates at x=ox, inputs S at y=55 and R at y=205 */
+function rsCore(ox, sFrom) {
+  return [
+    wire("S", `M${sFrom} 55 H${ox}`),
+    wire("R", `M${sFrom} 205 H${ox}`),
+    wire("Qb", `M${ox + 150} 190 V110 H${ox - 50} V85 H${ox}`),
+    wire("Q", `M${ox + 130} 70 V140 H${ox - 30} V175 H${ox}`),
+    wire("Q", `M${ox + 77} 70 H${ox + 190}`),
+    wire("Qb", `M${ox + 77} 190 H${ox + 190}`),
+    dot("Q", ox + 130, 70), dot("Qb", ox + 150, 190),
+    nandGate(ox, 40), nandGate(ox, 160),
+    text(ox + 18, 75, "NAND", "gtext"), text(ox + 18, 195, "NAND", "gtext"),
+    text(ox + 198, 75, "Q"), text(ox + 198, 195, "Q′"),
+    val("Q", ox + 218, 75), val("Qb", ox + 218, 195),
+  ].join("");
+}
+function settleRS(S, R, Q, Qb) {
+  for (let i = 0; i < 6; i++) { const nq = b(!(S && Qb)); const nqb = b(!(R && nq)); if (nq === Q && nqb === Qb) break; Q = nq; Qb = nqb; }
+  return [Q, Qb];
+}
+function bindBit(btn, get, set) {
+  const paint = () => { btn.setAttribute("aria-pressed", get() ? "true" : "false"); btn.querySelector(".v").textContent = b(get()); };
+  btn.addEventListener("click", () => set(!get()));
+  return paint;
+}
+
+/* ---------- tabs ---------- */
+const TAB_CH = {};
+$$(".tabs[data-ch]").forEach((nav) => $$("[data-go]", nav).forEach((t) => (TAB_CH[t.dataset.go] = nav.dataset.ch)));
+const lastTab = { 2: 7, 3: 0 };
+function go(n) {
+  const ch = TAB_CH[n];
+  $$("section.stage").forEach((s, i) => s.classList.toggle("active", i === n));
+  $$(".tab[data-go]").forEach((t) => t.setAttribute("aria-selected", +t.dataset.go === n ? "true" : "false"));
+  $$(".tabs[data-ch]").forEach((nav) => (nav.hidden = nav.dataset.ch !== ch));
+  $$(".chap").forEach((c) => c.setAttribute("aria-selected", c.dataset.ch === ch ? "true" : "false"));
+  lastTab[ch] = n;
+  try { localStorage.setItem("seqsim-tab", n); } catch (e) {}
+}
+$$("[data-go]").forEach((el) => el.addEventListener("click", () => go(+el.dataset.go)));
+$$(".chap").forEach((c) => c.addEventListener("click", () => go(lastTab[c.dataset.ch])));
+
+/* ===== R-S latch ===== */
+const rs = { S: 1, R: 1, Q: 0, Qb: 1, busy: false };
+const svgRS = $("#svg-rs");
+svgRS.innerHTML = rsCore(240, 40) + text(14, 60, "S") + text(14, 210, "R") + val("S", 60, 48) + val("R", 60, 198);
+const paintS = bindBit($("#rs-S"), () => rs.S, (v) => setRS("S", b(v)));
+const paintR = bindBit($("#rs-R"), () => rs.R, (v) => setRS("R", b(v)));
+function drawRS() {
+  setSig(svgRS, { S: rs.S, R: rs.R, Q: rs.Q, Qb: rs.Qb });
+  paintS(); paintR();
+  $("#rs-release").disabled = rs.busy || !(rs.S === 0 && rs.R === 0);
+  $("#rs-S").disabled = $("#rs-R").disabled = rs.busy;
+}
+function describeRS() {
+  const k = `${rs.R}${rs.S}`;
+  if (k === "10") status("#rs-status", "S=0 → Set, Q=1");
+  else if (k === "01") status("#rs-status", "R=0 → Reset, Q=0");
+  else if (k === "00") status("#rs-status", "S=R=0 → 금지 입력, Q=Q′=1", true);
+  else status("#rs-status", `S=R=1 → 유지, Q=${rs.Q}`);
+}
+function setRS(which, v) {
+  if (rs.busy) return;
+  rs[which] = v;
+  [rs.Q, rs.Qb] = settleRS(rs.S, rs.R, rs.Q, rs.Qb);
+  drawRS(); describeRS();
+}
+$("#rs-release").addEventListener("click", () => {
+  if (rs.busy || rs.S || rs.R) return;
+  rs.busy = true; rs.S = 1; rs.R = 1;
+  drawRS(); status("#rs-status", "동시에 1로 → 진동 중 (메타안정)", true);
+  let n = 0;
+  const tick = () => {
+    rs.Q = rs.Qb = n % 2 ? 1 : 0;
+    setSig(svgRS, { Q: rs.Q, Qb: rs.Qb });
+    if (++n < 9) return setTimeout(tick, 230);
+    const r = Math.random() < 0.5 ? 1 : 0; rs.Q = r; rs.Qb = 1 - r;
+    rs.busy = false; drawRS();
+    status("#rs-status", `메타안정 → Q=${r}로 정착 (예측 불가)`, true);
+  };
+  setTimeout(tick, 300);
+});
+drawRS(); describeRS();
+
+/* ===== Gated D latch ===== */
+const dl = { D: 0, WE: 0, Q: 0, Qb: 1 };
+const svgD = $("#svg-d");
+svgD.innerHTML = [
+  wire("D", "M40 40 H190"), wire("D", "M80 40 V220 H110"), wire("Dn", "M136 220 H190"),
+  wire("WE", "M40 130 H150"), wire("WE", "M150 130 V70 H190"), wire("WE", "M150 130 V190 H190"),
+  dot("D", 80, 40), dot("WE", 150, 130),
+  inverter(110, 220), nandGate(190, 25), nandGate(190, 175),
+  wire("S", "M267 55 H400"), wire("R", "M267 205 H400"),
+  rsCore(400, 400),
+  text(14, 45, "D"), text(4, 135, "WE"), val("D", 50, 32), val("WE", 50, 122), val("Dn", 150, 213),
+  text(290, 46, "S", "gtext"), val("S", 304, 46), text(290, 226, "R", "gtext"), val("R", 304, 226),
+  `<rect x="330" y="26" width="300" height="214" rx="10" fill="none" stroke="var(--off)" stroke-dasharray="5 5"/>`,
+].join("");
+const paintD = bindBit($("#d-D"), () => dl.D, (v) => setD("D", b(v)));
+const paintWE = bindBit($("#d-WE"), () => dl.WE, (v) => setD("WE", b(v)));
+function setD(which, v) {
+  if (which) dl[which] = v;
+  const S = b(!(dl.D && dl.WE)), R = b(!(!dl.D && dl.WE));
+  [dl.Q, dl.Qb] = settleRS(S, R, dl.Q, dl.Qb);
+  setSig(svgD, { D: dl.D, Dn: !dl.D, WE: dl.WE, S, R, Q: dl.Q, Qb: dl.Qb });
+  paintD(); paintWE();
+  status("#d-status", dl.WE ? `WE=1 → Q가 D를 따라감, Q=${dl.Q} (S=${S}, R=${R})` : `WE=0 → 유지, Q=${dl.Q} (S=R=1)`);
+}
+setD();
+
+/* ===== Register ===== */
+const reg = { D: [0, 0, 0, 0], Q: [0, 0, 0, 0], WE: 0 }; // index 0 = bit3
+const svgReg = $("#svg-reg");
+(() => {
+  let s = "";
+  for (let i = 0; i < 4; i++) {
+    const x = 70 + i * 140, bit = 3 - i;
+    s += wire(`d${i}`, `M${x + 50} 30 V80`) + text(x + 50, 22, `D${bit}`, "lbl", "middle") + val(`d${i}`, x + 62, 60);
+    s += `<rect class="box" data-box="${i}" x="${x}" y="80" width="100" height="74" rx="8"/>`;
+    s += text(x + 50, 100, "D 래치", "gtext", "middle");
+    s += `<text class="big" data-q="${i}" x="${x + 50}" y="136" text-anchor="middle">0</text>`;
+    s += wire("we", `M${x + 18} 186 V154`) + dot("we", x + 18, 186);
+    s += wire(`q${i}`, `M${x + 72} 154 V218`) + text(x + 72, 240, `Q${bit}`, "lbl", "middle") + val(`q${i}`, x + 80, 200);
+  }
+  s += wire("we", "M30 186 H598") + text(4, 191, "WE", "lbl") + val("we", 30, 178);
+  svgReg.innerHTML = s;
+})();
+const regPaint = ["D3", "D2", "D1", "D0"].map((n, i) => bindBit($("#r-" + n), () => reg.D[i], (v) => { reg.D[i] = b(v); drawReg(); }));
+const paintRWE = bindBit($("#r-WE"), () => reg.WE, (v) => { reg.WE = b(v); drawReg(); });
+function drawReg() {
+  if (reg.WE) reg.Q = [...reg.D];
+  const sig = { we: reg.WE };
+  reg.D.forEach((v, i) => (sig["d" + i] = v));
+  reg.Q.forEach((v, i) => (sig["q" + i] = v));
+  setSig(svgReg, sig);
+  reg.Q.forEach((v, i) => {
+    const t = $(`[data-q="${i}"]`, svgReg); t.textContent = v; t.classList.toggle("on", !!v);
+    $(`[data-box="${i}"]`, svgReg).classList.toggle("write", !!reg.WE);
+  });
+  regPaint.forEach((p) => p()); paintRWE();
+  const q = reg.Q.join("");
+  status("#r-status", `${reg.WE ? "WE=1 → 기록" : "WE=0 → 유지"}, Q[3:0] = ${q} (${parseInt(q, 2)})`);
+}
+let regPulse = false;
+$("#r-pulse").addEventListener("click", () => {
+  if (regPulse) return; regPulse = true; $("#r-pulse").disabled = true;
+  reg.WE = 1; drawReg();
+  setTimeout(() => { reg.WE = 0; drawReg(); regPulse = false; $("#r-pulse").disabled = false; }, 700);
+});
+drawReg();
+
+/* ===== Memory (4 locations x 3 bits) ===== */
+const mem = { cells: [[0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 0]], A: [0, 0], Di: [0, 0, 0], WE: 0 };
+const svgMem = $("#svg-mem");
+const ROWY = [110, 170, 230, 290], COLX = [250, 350, 450];
+(() => {
+  let s = "";
+  COLX.forEach((x, c) => {
+    s += wire(`di${c}`, `M${x + 35} 34 V${ROWY[3] + 8}`) + text(x + 35, 24, `Di[${2 - c}]`, "lbl", "middle") + val(`di${c}`, x + 46, 52);
+  });
+  s += wire("we", "M20 70 H560") + text(4, 64, "WE", "lbl") + val("we", 34, 62);
+  s += wire("a1", "M20 170 H70") + wire("a0", "M20 230 H70") + text(4, 160, "Addr[1]", "gtext") + text(4, 220, "Addr[0]", "gtext") + val("a1", 46, 186) + val("a0", 46, 246);
+  s += `<rect class="box" x="70" y="88" width="80" height="224" rx="8"/>` + text(110, 205, "디코더", "gtext", "middle");
+  ROWY.forEach((y, r) => {
+    s += wire(`wl${r}`, `M150 ${y} H560`) + text(160, y - 6, ["00", "01", "10", "11"][r], "gtext");
+    COLX.forEach((x, c) => {
+      s += `<rect class="box" data-cell="${r}-${c}" x="${x}" y="${y - 22}" width="70" height="44" rx="6"/>`;
+      s += `<text class="big" data-cv="${r}-${c}" x="${x + 35}" y="${y + 8}" text-anchor="middle">0</text>`;
+    });
+  });
+  s += `<path class="box" d="M240 330 H530 L505 362 H265 Z"/>` + text(385, 351, "MUX", "gtext", "middle");
+  COLX.forEach((x, c) => { s += wire(`do${c}`, `M${x + 35} 362 V384`) + text(x + 35, 398, `D[${2 - c}]`, "gtext", "middle") + val(`do${c}`, x + 46, 380); });
+  svgMem.innerHTML = s;
+})();
+const memPaint = [
+  bindBit($("#m-A1"), () => mem.A[0], (v) => { mem.A[0] = b(v); drawMem(); }),
+  bindBit($("#m-A0"), () => mem.A[1], (v) => { mem.A[1] = b(v); drawMem(); }),
+  bindBit($("#m-Di2"), () => mem.Di[0], (v) => { mem.Di[0] = b(v); drawMem(); }),
+  bindBit($("#m-Di1"), () => mem.Di[1], (v) => { mem.Di[1] = b(v); drawMem(); }),
+  bindBit($("#m-Di0"), () => mem.Di[2], (v) => { mem.Di[2] = b(v); drawMem(); }),
+  bindBit($("#m-WE"), () => mem.WE, (v) => { mem.WE = b(v); drawMem(); }),
+];
+function drawMem() {
+  const a = mem.A[0] * 2 + mem.A[1];
+  if (mem.WE) mem.cells[a] = [...mem.Di];
+  const sig = { we: mem.WE, a1: mem.A[0], a0: mem.A[1] };
+  mem.Di.forEach((v, c) => (sig["di" + c] = v));
+  ROWY.forEach((_, r) => (sig["wl" + r] = r === a));
+  mem.cells[a].forEach((v, c) => (sig["do" + c] = v));
+  setSig(svgMem, sig);
+  ROWY.forEach((_, r) => COLX.forEach((_, c) => {
+    const v = mem.cells[r][c];
+    const t = $(`[data-cv="${r}-${c}"]`, svgMem); t.textContent = v; t.classList.toggle("on", !!v);
+    const box = $(`[data-cell="${r}-${c}"]`, svgMem);
+    box.classList.toggle("sel", r === a); box.classList.toggle("write", r === a && !!mem.WE);
+  }));
+  memPaint.forEach((p) => p());
+  const ab = a.toString(2).padStart(2, "0");
+  status("#m-status", mem.WE ? `쓰기: 주소 ${ab} ← ${mem.Di.join("")}` : `읽기: 주소 ${ab} → D[2:0] = ${mem.cells[a].join("")}`);
+}
+let memPulse = false;
+$("#m-pulse").addEventListener("click", () => {
+  if (memPulse) return; memPulse = true; $("#m-pulse").disabled = true;
+  mem.WE = 1; drawMem();
+  setTimeout(() => { mem.WE = 0; drawMem(); memPulse = false; $("#m-pulse").disabled = false; }, 700);
+});
+drawMem();
+
+/* ===== D flip-flop: two gated D latches (slide 70) ===== */
+const ff = { D: 0, CLK: 0, M: 0, Q: 0, L: 0, auto: 0, timer: null, hist: [], edge: false };
+const svgFF = $("#svg-ff"), svgW = $("#svg-wave");
+svgFF.innerHTML = [
+  wire("D", "M20 80 H130"), text(20, 70, "D", "lbl"), val("D", 44, 70),
+  `<rect class="box" data-latch="1" x="130" y="40" width="140" height="120" rx="10"/>`,
+  text(200, 62, "D 래치 1", "gtext", "middle"),
+  `<text class="big" data-lv="1" x="200" y="108" text-anchor="middle">0</text>`,
+  `<text class="gtext" data-ls="1" x="200" y="136" text-anchor="middle"></text>`,
+  wire("M", "M270 80 H370"), val("M", 320, 70, "middle"),
+  `<rect class="box" data-latch="2" x="370" y="40" width="140" height="120" rx="10"/>`,
+  text(440, 62, "D 래치 2", "gtext", "middle"),
+  `<text class="big" data-lv="2" x="440" y="108" text-anchor="middle">0</text>`,
+  `<text class="gtext" data-ls="2" x="440" y="136" text-anchor="middle"></text>`,
+  wire("Q", "M510 80 H610"), text(612, 85, "Q", "lbl"), val("Q", 560, 70, "middle"),
+  wire("CLK", "M20 230 H460"), text(20, 220, "CLK", "lbl"), val("CLK", 64, 220),
+  wire("CLK", "M200 230 V206"), dot("CLK", 200, 230),
+  `<path class="gate" d="M189 206 L211 206 L200 187 Z"/><circle class="gate" cx="200" cy="183" r="4"/>`,
+  wire("nCLK", "M200 179 V160"), text(208, 176, "¬CLK", "gtext"),
+  wire("CLK", "M460 230 V160"),
+  text(200, 155, "WE", "gtext", "middle"), text(460, 155, "WE", "gtext", "middle"),
+].join("");
+const WN = 100, WX0 = 96, WDX = (636 - WX0) / WN;
+const ROWS = [["CLK", "clk", 22], ["D", "d", 66], ["Q (플립플롭)", "q", 110], ["Q (래치, WE=CLK)", "l", 154]];
+svgW.innerHTML = `<rect x="${WX0 - 4}" y="2" width="${640 - WX0 + 2}" height="190" rx="8" fill="rgba(0,0,0,.3)" stroke="var(--line)"/>` +
+  `<g data-edges></g>` +
+  ROWS.map(([n, k, y]) => text(4, y + 14, n, "gtext") + `<path class="wave wave-${k}" data-wave="${k}" d=""/>`).join("");
+const paintFD = bindBit($("#ff-D"), () => ff.D, (v) => { ff.D = b(v); stepFF(); });
+const paintFC = bindBit($("#ff-CLK"), () => ff.CLK, (v) => { ff.CLK = b(v); stepFF(); });
+const paintFA = bindBit($("#ff-auto"), () => ff.auto, (v) => {
+  ff.auto = b(v); clearInterval(ff.timer);
+  if (ff.auto) ff.timer = setInterval(() => { ff.CLK = b(!ff.CLK); stepFF(); }, 800);
+  paintFA();
+});
+function stepFF() {
+  const prevClk = ff.lastClk ?? 0;
+  if (!ff.CLK) ff.M = ff.D;      // latch 1 transparent while CLK=0
+  if (ff.CLK) { ff.Q = ff.M; ff.L = ff.D; } // latch 2 (and the plain latch) transparent while CLK=1
+  if (ff.CLK && !prevClk) ff.edge = true;
+  ff.lastClk = ff.CLK;
+  drawFF(ff.CLK && !prevClk);
+}
+function drawFF(rising) {
+  setSig(svgFF, { D: ff.D, M: ff.M, Q: ff.Q, CLK: ff.CLK, nCLK: !ff.CLK });
+  [[1, ff.M, !ff.CLK], [2, ff.Q, ff.CLK]].forEach(([i, v, open]) => {
+    const t = $(`[data-lv="${i}"]`, svgFF); t.textContent = v; t.classList.toggle("on", !!v);
+    $(`[data-latch="${i}"]`, svgFF).classList.toggle("sel", open);
+    $(`[data-ls="${i}"]`, svgFF).textContent = open ? "열림 (투명)" : "잠김 (유지)";
+  });
+  paintFD(); paintFC(); paintFA();
+  if (rising) status("#ff-status", `상승 에지 0→1 → Q ← ${ff.Q}`);
+  else status("#ff-status", ff.CLK ? `CLK=1: 래치 1 잠김 · 래치 2 열림 → Q=${ff.Q} 유지 (D를 바꿔도 그대로)` : `CLK=0: 래치 1 열림 (M=D=${ff.M}) · 래치 2 잠김 → Q=${ff.Q} 유지`);
+}
+function drawWave() {
+  ff.hist.push({ clk: ff.CLK, d: ff.D, q: ff.Q, l: ff.L, e: ff.edge });
+  ff.edge = false;
+  if (ff.hist.length > WN) ff.hist.shift();
+  const off = WN - ff.hist.length;
+  ROWS.forEach(([, k, y]) => {
+    let d = "";
+    ff.hist.forEach((h, i) => {
+      const x = WX0 + (off + i) * WDX, yy = h[k] ? y : y + 22;
+      d += i === 0 ? `M${x} ${yy}` : ` V${yy}`;
+      d += ` H${x + WDX}`;
+    });
+    $(`[data-wave="${k}"]`, svgW).setAttribute("d", d);
+  });
+  $("[data-edges]", svgW).innerHTML = ff.hist.map((h, i) => h.e ? `<line x1="${WX0 + (off + i) * WDX}" y1="8" x2="${WX0 + (off + i) * WDX}" y2="186" stroke="var(--hot)" stroke-width="1" stroke-dasharray="3 4" opacity=".7"/>` : "").join("");
+}
+setInterval(drawWave, 100);
+stepFF();
+
+/* ===== D flip-flop based register (slide 74) ===== */
+const fr = { Dm: [0, 0, 0, 0], Q: [0, 0, 0, 0], CLK: 0, auto: 0, cnt: 0, timer: null, hist: [], edge: false, lastClk: 0 }; // index 0 = bit3
+const svgFR = $("#svg-fr"), svgFRW = $("#svg-frw");
+const toBits = (n) => [3, 2, 1, 0].map((k) => (n >> k) & 1);
+const toNum = (a) => a.reduce((s, v) => s * 2 + v, 0);
+const hex = (a) => toNum(a).toString(16).toUpperCase();
+const frD = () => (fr.cnt ? toBits((toNum(fr.Q) + 1) & 15) : fr.Dm);
+(() => {
+  let s = "";
+  s += `<g data-fb opacity="0.15"><path class="bus" d="M560 262 H14 V30 H44"/>` + text(20, 250, "Q", "gtext") + `</g>`;
+  s += `<rect class="box" x="44" y="12" width="120" height="38" rx="8"/>` + `<text class="gtext" data-src x="104" y="35" text-anchor="middle">입력 스위치</text>`;
+  s += `<path class="bus" d="M164 30 H560"/>` + `<text class="busval" data-frd x="570" y="35">0</text>` + text(570, 52, "D[3:0]", "gtext");
+  for (let i = 0; i < 4; i++) {
+    const x = 150 + i * 120, bit = 3 - i;
+    s += wire(`fd${i}`, `M${x + 40} 30 V92`) + dot(`fd${i}`, x + 40, 30) + text(x + 48, 70, `D${bit}`, "gtext") + val(`fd${i}`, x + 48, 86);
+    s += `<rect class="box" data-ff="${i}" x="${x}" y="92" width="80" height="84" rx="8"/>`;
+    s += text(x + 40, 110, "D FF", "gtext", "middle");
+    s += `<text class="big" data-frq="${i}" x="${x + 40}" y="146" text-anchor="middle">0</text>`;
+    s += `<path d="M${x} 152 L${x + 11} 160 L${x} 168" fill="none" stroke="var(--gate)" stroke-width="1.5"/>`;
+    s += wire("fclk", `M${x - 14} 212 V160 H${x}`) + dot("fclk", x - 14, 212);
+    s += wire(`fq${i}`, `M${x + 40} 176 V262`) + text(x + 48, 238, `Q${bit}`, "gtext") + val(`fq${i}`, x + 48, 254);
+  }
+  s += wire("fclk", "M30 212 H500") + text(30, 230, "CLK", "lbl") + val("fclk", 74, 230);
+  s += `<path class="bus" d="M190 262 H560"/>` + `<text class="busval" data-frq-all x="570" y="267">0</text>` + text(570, 284, "Q[3:0]", "gtext");
+  svgFR.innerHTML = s;
+  svgFRW.innerHTML = `<rect x="92" y="2" width="546" height="106" rx="8" fill="rgba(0,0,0,.3)" stroke="var(--line)"/><g data-fredges></g>` +
+    text(4, 28, "CLK", "gtext") + `<path class="wave wave-clk" data-frw="clk" d=""/>` +
+    text(4, 62, "D[3:0]", "gtext") + `<g data-frw="d"></g>` + text(4, 96, "Q[3:0]", "gtext") + `<g data-frw="q"></g>`;
+})();
+const frPaint = [0, 1, 2, 3].map((i) => bindBit($(`#fr-D${3 - i}`), () => frD()[i], (v) => { if (fr.cnt) return; fr.Dm[i] = b(v); stepFR(); }));
+const paintFRC = bindBit($("#fr-CLK"), () => fr.CLK, (v) => { fr.CLK = b(v); stepFR(); });
+const paintFRA = bindBit($("#fr-auto"), () => fr.auto, (v) => {
+  fr.auto = b(v); clearInterval(fr.timer);
+  if (fr.auto) fr.timer = setInterval(() => { fr.CLK = b(!fr.CLK); stepFR(); }, 800);
+  paintFRA();
+});
+const paintCnt = bindBit($("#fr-cnt"), () => fr.cnt, (v) => { fr.cnt = b(v); stepFR(); });
+$("#fr-reset").addEventListener("click", () => { fr.Q = [0, 0, 0, 0]; stepFR(); });
+function stepFR() {
+  const rising = fr.CLK && !fr.lastClk;
+  if (rising) { fr.Q = [...frD()]; fr.edge = true; }
+  fr.lastClk = fr.CLK;
+  const D = frD();
+  const sig = { fclk: fr.CLK };
+  D.forEach((v, i) => (sig["fd" + i] = v));
+  fr.Q.forEach((v, i) => (sig["fq" + i] = v));
+  setSig(svgFR, sig);
+  fr.Q.forEach((v, i) => {
+    const t = $(`[data-frq="${i}"]`, svgFR); t.textContent = v; t.classList.toggle("on", !!v);
+    const box = $(`[data-ff="${i}"]`, svgFR);
+    if (rising) { box.classList.add("flash"); setTimeout(() => box.classList.remove("flash"), 250); }
+  });
+  $("[data-frd]", svgFR).textContent = hex(D);
+  $("[data-frq-all]", svgFR).textContent = hex(fr.Q);
+  $("[data-src]", svgFR).textContent = fr.cnt ? "Q + 1" : "입력 스위치";
+  $("[data-fb]", svgFR).setAttribute("opacity", fr.cnt ? "1" : "0.15");
+  frPaint.forEach((p) => p()); paintFRC(); paintFRA(); paintCnt();
+  [0, 1, 2, 3].forEach((i) => ($(`#fr-D${3 - i}`).disabled = !!fr.cnt));
+  const q = fr.Q.join(""), n = toNum(fr.Q);
+  if (rising) status("#fr-status", `상승 에지 → 4비트 동시에 Q[3:0] ← ${q} (${n})`);
+  else status("#fr-status", `Q[3:0] = ${q} (${n}) 유지 · 다음 상승 에지에 ${D.join("")} 저장`);
+}
+function drawFRW() {
+  fr.hist.push({ clk: fr.CLK, d: hex(frD()), q: hex(fr.Q), e: fr.edge });
+  fr.edge = false;
+  if (fr.hist.length > WN) fr.hist.shift();
+  const x0 = 96, dx = (636 - x0) / WN, off = WN - fr.hist.length;
+  let d = "";
+  fr.hist.forEach((h, i) => { const x = x0 + (off + i) * dx, y = h.clk ? 14 : 34; d += i === 0 ? `M${x} ${y}` : ` V${y}`; d += ` H${x + dx}`; });
+  $('[data-frw="clk"]', svgFRW).setAttribute("d", d);
+  [["d", 48, "var(--on)"], ["q", 82, "var(--hot)"]].forEach(([k, y, col]) => {
+    let g = "", startI = 0;
+    for (let i = 1; i <= fr.hist.length; i++) {
+      if (i === fr.hist.length || fr.hist[i][k] !== fr.hist[startI][k]) {
+        const xa = x0 + (off + startI) * dx + 1, xb = x0 + (off + i) * dx - 1, h = 22, m = Math.min(4, (xb - xa) / 2);
+        g += `<path d="M${xa} ${y + h / 2} L${xa + m} ${y} H${xb - m} L${xb} ${y + h / 2} L${xb - m} ${y + h} H${xa + m} Z" fill="none" stroke="${col}" stroke-width="1.6"/>`;
+        if (xb - xa > 16) g += `<text x="${(xa + xb) / 2}" y="${y + 15}" text-anchor="middle" fill="${col}" style="font:700 12px Consolas,monospace">${fr.hist[startI][k]}</text>`;
+        startI = i;
+      }
+    }
+    $(`[data-frw="${k}"]`, svgFRW).innerHTML = g;
+  });
+  $("[data-fredges]", svgFRW).innerHTML = fr.hist.map((h, i) => h.e ? `<line x1="${x0 + (off + i) * dx}" y1="6" x2="${x0 + (off + i) * dx}" y2="104" stroke="var(--hot)" stroke-dasharray="3 4" opacity=".7"/>` : "").join("");
+}
+setInterval(drawFRW, 100);
+stepFR();
+
+/* ===== FSM: traffic light controller (Moore, slides 78–106) ===== */
+const fsm = { S: 0, TA: 0, TB: 0, auto: 0, timer: null };
+const svgF = $("#svg-fsm");
+const POS = [[130, 100], [330, 100], [330, 280], [130, 280]];
+const COLOR = ["G", "Y", "R"]; // 00 green, 01 yellow, 10 red
+const nextState = (S, TA, TB) => {
+  const s1 = S >> 1, s0 = S & 1;
+  const n1 = s1 ^ s0;
+  const n0 = b((!s1 && !s0 && !TA) || (s1 && !s0 && !TB));
+  return n1 * 2 + n0;
+};
+const outputs = (S) => {
+  const s1 = S >> 1, s0 = S & 1;
+  return { LA: [s1, b(!s1 && s0)], LB: [b(!s1), b(s1 && s0)] };
+};
+const code = (bits) => COLOR[bits[0] * 2 + bits[1]];
+// transitions: [from, to, label, cond(TA,TB), svg path, label pos]
+const ARCS = [
+  [0, 1, "¬TA", (a) => !a, "M168 100 H286", [227, 90]],
+  [0, 0, "TA", (a) => a, "M100 77 C 40 30, 20 120, 92 112", [24, 82]],
+  [1, 2, "", () => true, "M330 138 V236", [0, 0]],
+  [2, 3, "¬TB", (a, t) => !t, "M292 280 H174", [233, 300]],
+  [2, 2, "TB", (a, t) => t, "M360 303 C 420 350, 440 260, 368 268", [442, 300]],
+  [3, 0, "", () => true, "M130 242 V144", [0, 0]],
+];
+(() => {
+  let s = `<defs>
+    <marker id="m-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path id="ah" d="M0 0 L10 5 L0 10 Z"/></marker>
+    <marker id="m-ahn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path id="ahn" d="M0 0 L10 5 L0 10 Z"/></marker>
+  </defs>`;
+  s += text(130, 30, "Reset ↓", "gtext", "middle");
+  ARCS.forEach(([f, t, l, , d, [lx, ly]], i) => {
+    s += `<path class="arc" data-arc="${i}" d="${d}" marker-end="url(#m-ah)"/>`;
+    if (l) s += `<text class="arclbl" data-arcl="${i}" x="${lx}" y="${ly}" text-anchor="middle">${l}</text>`;
+  });
+  POS.forEach(([x, y], i) => {
+    const o = outputs(i);
+    s += `<circle class="st" data-st="${i}" cx="${x}" cy="${y}" r="38"/>`;
+    s += `<text class="stname" x="${x}" y="${y + 1}" text-anchor="middle">S${i}</text>`;
+    s += `<text class="stcode" x="${x}" y="${y + 19}" text-anchor="middle">${i.toString(2).padStart(2, "0")}</text>`;
+    s += `<text class="gtext" x="${x}" y="${y + (i < 2 ? -48 : 60)}" text-anchor="middle">LA:${code(o.LA)} LB:${code(o.LB)}</text>`;
+  });
+  // traffic lights
+  [["LA", 480, "TA"], ["LB", 565, "TB"]].forEach(([n, x, sensor]) => {
+    s += text(x + 25, 34, n, "lbl", "middle");
+    s += `<rect x="${x}" y="44" width="50" height="146" rx="12" fill="#0d1018" stroke="#262c3c" stroke-width="1.5"/>`;
+    ["r", "y", "g"].forEach((c, k) => { s += `<circle class="lamp ${c}" data-lamp="${n}-${c}" cx="${x + 25}" cy="${72 + k * 45}" r="16"/>`; });
+    s += text(x + 25, 214, `${sensor}`, "gtext", "middle") + val(sensor, x + 25, 232, "middle");
+  });
+  // block diagram
+  s += `<line x1="10" y1="340" x2="630" y2="340" stroke="var(--line)" stroke-width="1"/>`;
+  s += wire("TA", "M14 400 H60") + wire("TB", "M14 425 H60") + text(14, 393, "TA", "gtext") + text(14, 418, "TB", "gtext");
+  s += `<rect class="box" x="60" y="375" width="140" height="110" rx="10"/>` + text(130, 420, "다음 상태", "gtext", "middle") + text(130, 436, "논리", "gtext", "middle");
+  s += `<path class="bus" data-bus="ns" d="M200 430 H262"/>` + `<text class="busval" data-busv="ns" x="231" y="420" text-anchor="middle">00</text>` + text(231, 452, "S′", "gtext", "middle");
+  s += `<rect class="box" data-reg x="262" y="380" width="104" height="100" rx="10"/>` + text(314, 400, "상태 레지스터", "gtext", "middle");
+  s += `<text class="regbits" data-regbits x="314" y="446" text-anchor="middle">00</text>`;
+  s += `<path d="M306 480 L314 468 L322 480" fill="none" stroke="var(--gate)" stroke-width="1.5"/>` + `<path class="wire" data-w="clk" d="M314 480 V520"/>` + text(324, 520, "CLK", "gtext");
+  s += `<path class="bus" d="M366 430 H446"/><path class="bus" d="M400 430 V505 H40 V460 H60"/>` + `<text class="busval" data-busv="s" x="406" y="420" text-anchor="middle">00</text>` + text(48, 500, "S", "gtext");
+  s += `<rect class="box" x="446" y="375" width="120" height="110" rx="10"/>` + text(506, 434, "출력 논리", "gtext", "middle");
+  s += `<path class="bus" d="M566 405 H630"/><path class="bus" d="M566 455 H630"/>`;
+  s += `<text class="busval" data-busv="la" x="598" y="396" text-anchor="middle">00</text>` + text(598, 422, "LA", "gtext", "middle");
+  s += `<text class="busval" data-busv="lb" x="598" y="446" text-anchor="middle">10</text>` + text(598, 472, "LB", "gtext", "middle");
+  svgF.innerHTML = s;
+})();
+const paintTA = bindBit($("#f-TA"), () => fsm.TA, (v) => { fsm.TA = b(v); drawFSM(); });
+const paintTB = bindBit($("#f-TB"), () => fsm.TB, (v) => { fsm.TB = b(v); drawFSM(); });
+const paintAuto = bindBit($("#f-auto"), () => fsm.auto, (v) => {
+  fsm.auto = b(v);
+  clearInterval(fsm.timer);
+  if (fsm.auto) fsm.timer = setInterval(clockFSM, 1200);
+  paintAuto();
+});
+const bits2 = (n) => n.toString(2).padStart(2, "0");
+const NAMES = { G: "초록", Y: "노랑", R: "빨강" };
+function drawFSM() {
+  const ns = nextState(fsm.S, fsm.TA, fsm.TB);
+  const o = outputs(fsm.S);
+  $$(".st", svgF).forEach((c) => c.classList.toggle("cur", +c.dataset.st === fsm.S));
+  ARCS.forEach(([f, , , cond], i) => {
+    const on = f === fsm.S && cond(fsm.TA, fsm.TB);
+    const p = $(`[data-arc="${i}"]`, svgF);
+    p.classList.toggle("next", on);
+    p.setAttribute("marker-end", on ? "url(#m-ahn)" : "url(#m-ah)");
+    const l = $(`[data-arcl="${i}"]`, svgF); if (l) l.classList.toggle("next", on);
+  });
+  const la = code(o.LA), lb = code(o.LB);
+  ["r", "y", "g"].forEach((c) => {
+    $(`[data-lamp="LA-${c}"]`, svgF).classList.toggle("lit", la.toLowerCase() === c);
+    $(`[data-lamp="LB-${c}"]`, svgF).classList.toggle("lit", lb.toLowerCase() === c);
+  });
+  setSig(svgF, { TA: fsm.TA, TB: fsm.TB });
+  const pending = ns !== fsm.S;
+  $('[data-bus="ns"]', svgF).classList.toggle("pending", pending);
+  const nsv = $('[data-busv="ns"]', svgF); nsv.textContent = bits2(ns); nsv.classList.toggle("pending", pending);
+  $('[data-busv="s"]', svgF).textContent = bits2(fsm.S);
+  $("[data-regbits]", svgF).textContent = bits2(fsm.S);
+  $('[data-busv="la"]', svgF).textContent = o.LA.join("");
+  $('[data-busv="lb"]', svgF).textContent = o.LB.join("");
+  paintTA(); paintTB(); paintAuto();
+  status("#f-status", `S${fsm.S} (LA ${NAMES[la]}, LB ${NAMES[lb]}) · 다음 클록에 ${pending ? `S${ns}로 이동` : "그대로 유지"}`);
+}
+function clockFSM() {
+  fsm.S = nextState(fsm.S, fsm.TA, fsm.TB);
+  setSig(svgF, { clk: 1 });
+  const reg = $("[data-reg]", svgF); reg.classList.add("flash");
+  setTimeout(() => { reg.classList.remove("flash"); setSig(svgF, { clk: 0 }); }, 250);
+  drawFSM();
+}
+$("#f-clk").addEventListener("click", clockFSM);
+$("#f-reset").addEventListener("click", () => { fsm.S = 0; drawFSM(); });
+drawFSM();
+
+/* =================================================================
+   LECTURE 2: COMBINATIONAL LOGIC
+   ================================================================= */
+function gateShape(type, x, y, h) {
+  const cy = y + h / 2; let s, ox;
+  if (type === "and" || type === "nand") {
+    s = `<path class="gate" d="M${x} ${y} H${x + 28} A${h / 2} ${h / 2} 0 0 1 ${x + 28} ${y + h} H${x} Z"/>`; ox = x + 28 + h / 2;
+  } else if (/^(x?n?or)$/.test(type)) {
+    s = `<path class="gate" d="M${x} ${y} Q${x + 32} ${y} ${x + 58} ${cy} Q${x + 32} ${y + h} ${x} ${y + h} Q${x + 16} ${cy} ${x} ${y} Z"/>`;
+    if (type[0] === "x") s += `<path class="gate" style="fill:none" d="M${x - 9} ${y} Q${x + 7} ${cy} ${x - 9} ${y + h}"/>`;
+    ox = x + 58;
+  } else { s = `<path class="gate" d="M${x} ${y} L${x} ${y + h} L${x + 40} ${cy} Z"/>`; ox = x + 40; }
+  if (/^(nand|nor|xnor|not)$/.test(type)) { s += `<circle class="gate" cx="${ox + 5}" cy="${cy}" r="5"/>`; ox += 10; }
+  return { s, ox, oy: cy };
+}
+const tog = (svg, id, c, v) => $$(`[data-w="${id}"]`, svg).forEach((e) => e.classList.toggle(c, !!v));
+const vtext = (svg, id, t, cls = "") => $$(`[data-v="${id}"]`, svg).forEach((e) => { e.textContent = t; e.classList.remove("on", "bad", "pendv"); if (cls) e.classList.add(cls); });
+const gndSym = (x, y) => `<path d="M${x - 20} ${y} H${x + 20} M${x - 12} ${y + 7} H${x + 12} M${x - 5} ${y + 14} H${x + 5}" stroke="var(--gate)" stroke-width="2"/>`;
+const vddSym = (x1, x2, y) => `<path d="M${x1} ${y} H${x2}" stroke="var(--on)" stroke-width="3" style="filter:drop-shadow(0 0 4px var(--on-glow))"/>`;
+
+/* ===== CMOS NOT / NAND (switch level, slides 3–5) ===== */
+function mos(id, inp, x, y1, y2, p, dir = -1) {
+  const y = (y1 + y2) / 2, plate = x + dir * 14, bub = x + dir * 20, end = p ? x + dir * 25 : plate, start = x + dir * 66;
+  const anchor = dir < 0 ? "end" : "start", sx = x - dir * 30, sa = dir < 0 ? "start" : "end";
+  return wire(inp, `M${start} ${y} H${end}`) + (p ? `<circle class="gate" cx="${bub}" cy="${y}" r="5"/>` : "") +
+    `<line x1="${plate}" y1="${y - 14}" x2="${plate}" y2="${y + 14}" stroke="var(--gate)" stroke-width="2.5"/>` +
+    text(start + dir * 6, y + 5, inp, "lbl", anchor) + val(inp, start + dir * 6, y - 12, anchor) +
+    `<g data-sw="${id}"><line class="lev lev-on" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"/>` +
+    `<line class="lev lev-off" x1="${x}" y1="${y2}" x2="${x - dir * 18}" y2="${y1 + 6}"/>` +
+    `<circle class="term" cx="${x}" cy="${y1}" r="3.5"/><circle class="term" cx="${x}" cy="${y2}" r="3.5"/></g>` +
+    `<text class="gtext" x="${sx}" y="${y - 6}" text-anchor="${sa}">${p ? "pMOS" : "nMOS"}</text>` +
+    `<text class="swst" data-sws="${id}" x="${sx}" y="${y + 12}" text-anchor="${sa}">OFF</text>`;
+}
+function setSw(svg, id, on) {
+  $(`[data-sw="${id}"]`, svg).classList.toggle("on", !!on);
+  const t = $(`[data-sws="${id}"]`, svg); t.textContent = on ? "ON" : "OFF"; t.classList.toggle("on", !!on);
+}
+const cm = { mode: "not", A: 0, B: 0 };
+const svgCN = $("#svg-cnot"), svgCD = $("#svg-cnand");
+svgCN.innerHTML = vddSym(290, 350, 40) + text(360, 45, "VDD", "gtext") +
+  wire("vdd", "M320 40 V80") + mos("p", "A", 320, 80, 130, true) +
+  wire("y", "M320 130 V180") + wire("y", "M320 155 H520") + dot("y", 320, 155) + text(530, 160, "Y") + val("y", 550, 160) +
+  mos("n", "A", 320, 180, 230, false) + wire("gnd", "M320 230 V268") + gndSym(320, 268) + text(350, 280, "GND", "gtext");
+svgCD.innerHTML = vddSym(200, 440, 30) + text(450, 35, "VDD", "gtext") +
+  wire("vdd", "M230 30 V60") + wire("vdd", "M410 30 V60") +
+  mos("pA", "A", 230, 60, 110, true, -1) + mos("pB", "B", 410, 60, 110, true, 1) +
+  wire("y", "M230 110 V140 H410 V110") + wire("y", "M320 140 V170") + wire("y", "M410 140 H560") +
+  dot("y", 320, 140) + dot("y", 410, 140) + text(570, 145, "Y") + val("y", 590, 145) +
+  mos("nA", "A", 320, 170, 215, false, -1) + wire("mid", "M320 215 V240") +
+  mos("nB", "B", 320, 240, 285, false, -1) + wire("gnd", "M320 285 V308") + gndSym(320, 308) + text(350, 320, "GND", "gtext") +
+  text(320, 52, "pMOS 병렬", "gtext", "middle") + text(400, 232, "nMOS 직렬", "gtext");
+const paintCA = bindBit($("#cm-A"), () => cm.A, (v) => { cm.A = b(v); drawCM(); });
+const paintCB = bindBit($("#cm-B"), () => cm.B, (v) => { cm.B = b(v); drawCM(); });
+$$("[data-cmode]").forEach((btn) => btn.addEventListener("click", () => { cm.mode = btn.dataset.cmode; drawCM(); }));
+function drawCM() {
+  const nand = cm.mode === "nand";
+  svgCN.toggleAttribute("hidden", nand); svgCD.toggleAttribute("hidden", !nand); $("#cm-B").disabled = !nand;
+  $$("[data-cmode]").forEach((btn) => btn.setAttribute("aria-selected", btn.dataset.cmode === cm.mode ? "true" : "false"));
+  paintCA(); paintCB();
+  if (!nand) {
+    const y = b(!cm.A);
+    setSig(svgCN, { A: cm.A, vdd: 1, gnd: 0, y });
+    setSw(svgCN, "p", !cm.A); setSw(svgCN, "n", cm.A);
+    status("#cm-status", cm.A ? "A=1 → nMOS ON, pMOS OFF → Y가 GND에 연결, Y=0" : "A=0 → pMOS ON, nMOS OFF → Y가 VDD에 연결, Y=1");
+  } else {
+    const y = b(!(cm.A && cm.B));
+    setSig(svgCD, { A: cm.A, B: cm.B, vdd: 1, gnd: 0, mid: 0, y });
+    setSw(svgCD, "pA", !cm.A); setSw(svgCD, "pB", !cm.B); setSw(svgCD, "nA", cm.A); setSw(svgCD, "nB", cm.B);
+    status("#cm-status", y ? `병렬 pMOS 중 ${[!cm.A && "A", !cm.B && "B"].filter(Boolean).join("·")}쪽 ON → Y=1 (직렬 nMOS는 끊김)` : "A=B=1 → 직렬 nMOS 둘 다 ON, 병렬 pMOS 둘 다 OFF → Y=0");
+  }
+}
+drawCM();
+
+/* ===== basic gates (slide 8) ===== */
+const gt = { A: 0, B: 0 };
+const GT = [["AND", "and", (a, c) => a && c], ["OR", "or", (a, c) => a || c], ["XOR", "xor", (a, c) => a !== c], ["NOT", "not", (a) => !a],
+  ["NAND", "nand", (a, c) => !(a && c)], ["NOR", "nor", (a, c) => !(a || c)], ["XNOR", "xnor", (a, c) => a === c], ["BUF", "buf", (a) => a]];
+const svgG = $("#svg-gates");
+svgG.innerHTML = GT.map(([name, type], i) => {
+  const ox = (i % 4) * 160, oy = Math.floor(i / 4) * 150, x = ox + 62, y = oy + 52, one = type === "not" || type === "buf";
+  const g = gateShape(type, x, y, 44);
+  let s = text(ox + 84, oy + 34, name, "lbl", "middle");
+  if (one) s += wire("A", `M${ox + 22} ${y + 22} H${x + 4}`) + text(ox + 10, y + 26, "A", "gtext");
+  else s += wire("A", `M${ox + 22} ${y + 12} H${x + 10}`) + wire("B", `M${ox + 22} ${y + 32} H${x + 10}`) + text(ox + 10, y + 16, "A", "gtext") + text(ox + 10, y + 36, "B", "gtext");
+  return s + g.s + wire(`o${i}`, `M${g.ox} ${g.oy} H${ox + 150}`) + val(`o${i}`, ox + 140, g.oy - 8, "middle");
+}).join("");
+const paintGA = bindBit($("#g-A"), () => gt.A, (v) => { gt.A = b(v); drawG(); });
+const paintGB = bindBit($("#g-B"), () => gt.B, (v) => { gt.B = b(v); drawG(); });
+function drawG() {
+  const sig = { A: gt.A, B: gt.B };
+  GT.forEach(([, , f], i) => (sig["o" + i] = b(f(gt.A, gt.B))));
+  setSig(svgG, sig); paintGA(); paintGB();
+  status("#g-status", `A=${gt.A}, B=${gt.B} → ` + GT.map(([n], i) => `${n} ${sig["o" + i]}`).join(" · "));
+}
+drawG();
+
+/* ===== 2-to-4 decoder (slides 61–63) ===== */
+const dc = { A: 0, B: 0 };
+const svgDC = $("#svg-dec");
+(() => {
+  let s = text(110, 20, "A", "lbl", "middle") + text(210, 20, "B", "lbl", "middle");
+  s += wire("A", "M110 28 V320") + wire("A", "M110 45 H118") + dot("A", 110, 45) + inverter(118, 45) + wire("nA", "M145 45 H160 V320");
+  s += wire("B", "M210 28 V320") + wire("B", "M210 45 H218") + dot("B", 210, 45) + inverter(218, 45) + wire("nB", "M245 45 H260 V320");
+  [["A", 110], ["¬A", 160], ["B", 210], ["¬B", 260]].forEach(([n, x]) => (s += text(x, 338, n, "gtext", "middle")));
+  for (let k = 0; k < 4; k++) {
+    const y = 50 + k * 70, ra = k >> 1 ? ["A", 110] : ["nA", 160], rb = k & 1 ? ["B", 210] : ["nB", 260];
+    s += wire(ra[0], `M${ra[1]} ${y + 12} H368`) + dot(ra[0], ra[1], y + 12);
+    s += wire(rb[0], `M${rb[1]} ${y + 32} H368`) + dot(rb[0], rb[1], y + 32);
+    const g = gateShape("and", 360, y, 44);
+    s += g.s + wire(`y${k}`, `M${g.ox} ${g.oy} H560`) + text(568, g.oy + 5, `AB=${bits2(k)}`, "gtext") + val(`y${k}`, 540, g.oy - 8, "middle");
+  }
+  svgDC.innerHTML = s;
+})();
+const paintDA = bindBit($("#dc-A"), () => dc.A, (v) => { dc.A = b(v); drawDC(); });
+const paintDB = bindBit($("#dc-B"), () => dc.B, (v) => { dc.B = b(v); drawDC(); });
+function drawDC() {
+  const k = dc.A * 2 + dc.B, sig = { A: dc.A, nA: !dc.A, B: dc.B, nB: !dc.B };
+  for (let i = 0; i < 4; i++) sig["y" + i] = i === k;
+  setSig(svgDC, sig); paintDA(); paintDB();
+  status("#dc-status", `AB=${bits2(k)} → 출력 ${bits2(k)}만 1, 나머지 0 (one-hot)`);
+}
+drawDC();
+
+/* ===== MUX 2:1 and 4:1 (slides 65–68) ===== */
+const mx = { mode: "2", A: 0, B: 0, S: 0, D: [0, 0, 0, 0], S1: 0, S0: 0 };
+const svgM2 = $("#svg-mux2"), svgM4 = $("#svg-mux4");
+(() => {
+  let s = text(14, 67, "A") + val("A", 40, 54) + wire("A", "M36 62 H308");
+  s += text(14, 155, "S") + val("S", 40, 142) + wire("S", "M36 150 H160") + dot("S", 160, 150);
+  s += wire("S", "M160 150 V82 H200") + inverter(200, 82) + wire("nS", "M227 82 H308") + wire("S", "M160 150 V202 H308");
+  s += text(14, 227, "B") + val("B", 40, 214) + wire("B", "M36 222 H308");
+  const g1 = gateShape("and", 300, 50, 44), g2 = gateShape("and", 300, 190, 44), g3 = gateShape("or", 420, 110, 80);
+  s += wire("a1", "M350 72 H390 V125 H430") + wire("a2", "M350 212 H390 V175 H430");
+  s += g1.s + g2.s + g3.s + wire("Y", `M${g3.ox} ${g3.oy} H580`) + text(588, 155, "Y") + val("Y", 560, 142, "middle");
+  s += text(250, 72, "¬S", "gtext", "middle");
+  svgM2.innerHTML = s;
+  let t = text(110, 20, "S1", "lbl", "middle") + text(200, 20, "S0", "lbl", "middle");
+  t += wire("S1", "M110 28 V330") + wire("S1", "M110 36 H120") + dot("S1", 110, 36) + inverter(120, 36) + wire("nS1", "M147 36 H160 V330");
+  t += wire("S0", "M200 28 V330") + wire("S0", "M200 36 H210") + dot("S0", 200, 36) + inverter(210, 36) + wire("nS0", "M237 36 H250 V330");
+  [["S1", 110], ["¬S1", 160], ["S0", 200], ["¬S0", 250]].forEach(([n, x]) => (t += text(x, 342, n, "gtext", "middle")));
+  const ry = [125, 160, 195, 230], vx = [405, 415, 425, 435];
+  for (let i = 0; i < 4; i++) {
+    const y = 50 + i * 70, r1 = i >> 1 ? ["S1", 110] : ["nS1", 160], r0 = i & 1 ? ["S0", 200] : ["nS0", 250];
+    t += wire(`D${i}`, `M20 ${y + 10} H338`) + text(22, y + 4, `D${i}`, "gtext") + val(`D${i}`, 48, y + 4);
+    t += wire(r1[0], `M${r1[1]} ${y + 25} H338`) + dot(r1[0], r1[1], y + 25);
+    t += wire(r0[0], `M${r0[1]} ${y + 40} H338`) + dot(r0[0], r0[1], y + 40);
+    const g = gateShape("and", 330, y, 50);
+    t += wire(`g${i}`, `M${g.ox} ${g.oy} H${vx[i]} V${ry[i]} H470`) + g.s;
+  }
+  const o = gateShape("or", 460, 110, 140);
+  t += o.s + wire("Y", `M${o.ox} ${o.oy} H600`) + text(604, 185, "Y") + val("Y", 570, 168, "middle");
+  svgM4.innerHTML = t;
+})();
+const mxPaint = [
+  bindBit($("#mx-A"), () => mx.A, (v) => { mx.A = b(v); drawMX(); }),
+  bindBit($("#mx-B"), () => mx.B, (v) => { mx.B = b(v); drawMX(); }),
+  bindBit($("#mx-S"), () => mx.S, (v) => { mx.S = b(v); drawMX(); }),
+  ...[0, 1, 2, 3].map((i) => bindBit($(`#mx-D${i}`), () => mx.D[i], (v) => { mx.D[i] = b(v); drawMX(); })),
+  bindBit($("#mx-S1"), () => mx.S1, (v) => { mx.S1 = b(v); drawMX(); }),
+  bindBit($("#mx-S0"), () => mx.S0, (v) => { mx.S0 = b(v); drawMX(); }),
+];
+$$("[data-mmode]").forEach((btn) => btn.addEventListener("click", () => { mx.mode = btn.dataset.mmode; drawMX(); }));
+function drawMX() {
+  const four = mx.mode === "4";
+  svgM2.toggleAttribute("hidden", four); svgM4.toggleAttribute("hidden", !four); $("#mx2-ctl").hidden = four; $("#mx4-ctl").hidden = !four;
+  $$("[data-mmode]").forEach((btn) => btn.setAttribute("aria-selected", btn.dataset.mmode === mx.mode ? "true" : "false"));
+  mxPaint.forEach((p) => p());
+  if (!four) {
+    const a1 = b(mx.A && !mx.S), a2 = b(mx.B && mx.S), Y = b(a1 || a2);
+    setSig(svgM2, { A: mx.A, B: mx.B, S: mx.S, nS: !mx.S, a1, a2, Y });
+    status("#mx-status", `S=${mx.S} → ${mx.S ? "B" : "A"} 선택, Y = ${Y}`);
+  } else {
+    const k = mx.S1 * 2 + mx.S0, sig = { S1: mx.S1, nS1: !mx.S1, S0: mx.S0, nS0: !mx.S0, Y: mx.D[k] };
+    mx.D.forEach((v, i) => { sig["D" + i] = v; sig["g" + i] = b(v && i === k); });
+    setSig(svgM4, sig);
+    status("#mx-status", `S1S0=${bits2(k)} → D${k} 선택, Y = ${mx.D[k]}`);
+  }
+}
+drawMX();
+
+/* ===== full adder (slides 76–77) ===== */
+const fa = { A: 0, B: 0, C: 0 };
+const svgFA = $("#svg-fa");
+(() => {
+  let s = "";
+  [["A", 90], ["B", 130], ["C", 170]].forEach(([n, x]) => { s += wire(n, `M${x} 34 V310`) + text(x, 22, n === "C" ? "Cin" : n, "lbl", "middle"); });
+  const pin = (n, y, xe) => { const x = { A: 90, B: 130, C: 170 }[n]; return wire(n, `M${x} ${y} H${xe}`) + dot(n, x, y); };
+  const xg = gateShape("xor", 320, 40, 70);
+  s += pin("A", 52, 330) + pin("B", 75, 330) + pin("C", 98, 330);
+  s += pin("A", 152, 328) + pin("B", 172, 328) + pin("A", 217, 328) + pin("C", 237, 328) + pin("B", 282, 328) + pin("C", 302, 328);
+  s += wire("t1", "M370 162 H395 V205 H450") + wire("t2", "M370 227 H405 V230 H450") + wire("t3", "M370 292 H415 V255 H450");
+  s += xg.s + gateShape("and", 320, 140, 44).s + gateShape("and", 320, 205, 44).s + gateShape("and", 320, 270, 44).s;
+  const og = gateShape("or", 440, 190, 80);
+  s += og.s + wire("S", `M${xg.ox} ${xg.oy} H590`) + text(598, 80, "S") + val("S", 560, 64, "middle");
+  s += wire("Co", `M${og.ox} ${og.oy} H590`) + text(598, 235, "Cout") + val("Co", 560, 219, "middle");
+  s += text(348, 128, "AB", "gtext", "middle") + text(348, 194, "A·Cin", "gtext", "middle") + text(348, 260, "B·Cin", "gtext", "middle");
+  svgFA.innerHTML = s;
+})();
+const faPaint = ["A", "B", "C"].map((k) => bindBit($(`#fa-${k}`), () => fa[k], (v) => { fa[k] = b(v); drawFA(); }));
+function drawFA() {
+  const { A, B, C } = fa, S = A ^ B ^ C, t1 = A & B, t2 = A & C, t3 = B & C, Co = t1 | t2 | t3, n = A + B + C;
+  setSig(svgFA, { A, B, C, S, t1, t2, t3, Co });
+  faPaint.forEach((p) => p());
+  status("#fa-status", `A+B+Cin = ${n} = ${bits2(n)}₂ → Cout=${Co}, S=${S}`);
+}
+drawFA();
+
+/* ===== 4-bit ripple-carry adder (slides 78–79) ===== */
+const ad = { A: [0, 1, 1, 0], B: [0, 0, 1, 1], shown: 4, tok: 0 }; // index 0 = bit3
+const svgAD = $("#svg-add4");
+(() => {
+  let s = "";
+  for (let i = 0; i < 4; i++) {
+    const x = 470 - i * 130;
+    s += wire(`a${i}`, `M${x + 25} 40 V100`) + text(x + 25, 30, `A${i}`, "gtext", "middle") + val(`a${i}`, x + 33, 70);
+    s += wire(`b${i}`, `M${x + 65} 40 V100`) + text(x + 65, 30, `B${i}`, "gtext", "middle") + val(`b${i}`, x + 73, 70);
+    s += `<rect class="box" data-fa="${i}" x="${x}" y="100" width="90" height="80" rx="8"/>` + text(x + 45, 146, "FA", "lbl", "middle");
+    s += wire(`s${i}`, `M${x + 45} 180 V236`) + text(x + 45, 254, `S${i}`, "gtext", "middle") + val(`s${i}`, x + 53, 214);
+    s += wire(`c${i + 1}`, i < 3 ? `M${x} 140 H${x - 40}` : `M${x} 140 H24`) + val(`c${i + 1}`, i < 3 ? x - 20 : 50, 130, "middle");
+  }
+  s += wire("c0", "M600 140 H560") + text(604, 145, "0", "gtext") + text(580, 130, "Cin", "gtext", "middle") + text(24, 160, "Cout", "gtext");
+  svgAD.innerHTML = s;
+})();
+const adPaint = [];
+[0, 1, 2, 3].forEach((i) => {
+  adPaint.push(bindBit($(`#ad-A${3 - i}`), () => ad.A[i], (v) => { ad.A[i] = b(v); rippleAD(); }));
+  adPaint.push(bindBit($(`#ad-B${3 - i}`), () => ad.B[i], (v) => { ad.B[i] = b(v); rippleAD(); }));
+});
+function drawAD() {
+  const a = toNum(ad.A), bb = toNum(ad.B), c = [0], s = [];
+  for (let i = 0; i < 4; i++) { const x = ad.A[3 - i], y = ad.B[3 - i]; s[i] = x ^ y ^ c[i]; c[i + 1] = (x & y) | (x & c[i]) | (y & c[i]); }
+  const sig = { c0: 0 };
+  for (let i = 0; i < 4; i++) { sig["a" + i] = ad.A[3 - i]; sig["b" + i] = ad.B[3 - i]; }
+  for (let i = 0; i < 4; i++) {
+    const ok = i < ad.shown;
+    sig["s" + i] = ok && s[i]; sig["c" + (i + 1)] = ok && c[i + 1];
+  }
+  setSig(svgAD, sig);
+  for (let i = 0; i < 4; i++) {
+    const ok = i < ad.shown;
+    tog(svgAD, "s" + i, "pend", !ok); tog(svgAD, "c" + (i + 1), "pend", !ok);
+    if (!ok) { vtext(svgAD, "s" + i, "?", "pendv"); vtext(svgAD, "c" + (i + 1), "?", "pendv"); }
+    $(`[data-fa="${i}"]`, svgAD).classList.toggle("sel", i === ad.shown - 1 && ad.shown < 4);
+  }
+  adPaint.forEach((p) => p());
+  const sum = s.slice().reverse().join("");
+  status("#ad-status", ad.shown < 4 ? `carry 전파 중… ${ad.shown}/4 단계` : `A + B = ${a} + ${bb} = ${a + bb} → Cout=${c[4]}, S[3:0]=${sum}`);
+}
+function rippleAD() {
+  const tok = ++ad.tok; ad.shown = 0; drawAD();
+  const step = () => { if (tok !== ad.tok) return; ad.shown++; drawAD(); if (ad.shown < 4) setTimeout(step, 280); };
+  setTimeout(step, 280);
+}
+drawAD();
+
+/* ===== 4-bit equality comparator (slide 92) ===== */
+const cp = { A: [1, 0, 1, 1], B: [1, 0, 0, 1] }; // index 0 = bit3
+const svgCP = $("#svg-cmp");
+(() => {
+  let s = "";
+  const ry = [110, 150, 190, 230], vx = [405, 415, 425, 435];
+  for (let k = 0; k < 4; k++) {
+    const y = 30 + k * 72, bit = 3 - k;
+    s += wire(`a${k}`, `M150 ${y + 12} H310`) + text(140, y + 17, `A${bit}`, "gtext", "end") + val(`a${k}`, 160, y + 6);
+    s += wire(`b${k}`, `M150 ${y + 32} H310`) + text(140, y + 37, `B${bit}`, "gtext", "end") + val(`b${k}`, 160, y + 46);
+    const g = gateShape("xnor", 300, y, 44);
+    s += wire(`e${k}`, `M${g.ox} ${g.oy} H${vx[k]} V${ry[k]} H468`) + g.s + val(`e${k}`, g.ox + 10, g.oy - 8);
+  }
+  const ag = gateShape("and", 460, 90, 150);
+  s += ag.s + wire("eq", `M${ag.ox} ${ag.oy} H612`) + text(590, 150, "Eq", "lbl", "middle") + val("eq", 612, 150, "end");
+  svgCP.innerHTML = s;
+})();
+const cpPaint = [];
+[0, 1, 2, 3].forEach((i) => {
+  cpPaint.push(bindBit($(`#cp-A${3 - i}`), () => cp.A[i], (v) => { cp.A[i] = b(v); drawCP(); }));
+  cpPaint.push(bindBit($(`#cp-B${3 - i}`), () => cp.B[i], (v) => { cp.B[i] = b(v); drawCP(); }));
+});
+function drawCP() {
+  const sig = {}; let eq = 1;
+  for (let k = 0; k < 4; k++) { sig["a" + k] = cp.A[k]; sig["b" + k] = cp.B[k]; sig["e" + k] = b(cp.A[k] === cp.B[k]); eq &= sig["e" + k]; }
+  sig.eq = eq; setSig(svgCP, sig); cpPaint.forEach((p) => p());
+  const diff = [0, 1, 2, 3].filter((k) => !sig["e" + k]).map((k) => `bit${3 - k}`);
+  status("#cp-status", eq ? `A=${cp.A.join("")}, B=${cp.B.join("")} → 모든 비트 같음, Eq=1` : `A=${cp.A.join("")}, B=${cp.B.join("")} → ${diff.join(", ")} 다름, Eq=0`);
+}
+drawCP();
+
+/* ===== tri-state buffers on a shared bus (slides 97–98) ===== */
+const tr = { cd: 1, ce: 1, md: 0, me: 0 };
+const svgTR = $("#svg-tri");
+(() => {
+  const buf = (x) => `<path class="gate" d="M${x - 20} 100 H${x + 20} L${x} 140 Z"/>`;
+  let s = "";
+  s += wire("cd", "M200 40 V100") + text(200, 28, "CPU 데이터", "gtext", "middle") + val("cd", 210, 72);
+  s += wire("ce", "M100 120 H190") + text(92, 125, "E", "lbl", "end") + val("ce", 120, 110);
+  s += wire("oc", "M200 140 V230") + dot("oc", 200, 230);
+  s += wire("md", "M440 40 V100") + text(440, 28, "메모리 데이터", "gtext", "middle") + val("md", 450, 72);
+  s += wire("me", "M540 120 H450") + text(548, 125, "E", "lbl") + val("me", 520, 110, "end");
+  s += wire("om", "M440 140 V230") + dot("om", 440, 230);
+  s += wire("bus", "M60 230 H580") + text(60, 218, "BUS", "gtext");
+  s += buf(200) + buf(440);
+  s += `<text class="bigval" data-busv x="320" y="272" text-anchor="middle">BUS = Z</text>`;
+  svgTR.innerHTML = s;
+})();
+const trPaint = ["cd", "ce", "md", "me"].map((k) => bindBit($(`#tr-${k}`), () => tr[k], (v) => { tr[k] = b(v); drawTR(); }));
+function drawTR() {
+  setSig(svgTR, { cd: tr.cd, ce: tr.ce, md: tr.md, me: tr.me, oc: tr.ce && tr.cd, om: tr.me && tr.md });
+  tog(svgTR, "oc", "z", !tr.ce); tog(svgTR, "om", "z", !tr.me);
+  const n = tr.ce + tr.me, clash = n === 2 && tr.cd !== tr.md;
+  const v = n === 0 ? "Z" : clash ? "충돌" : String(tr.ce ? tr.cd : tr.md);
+  setSig(svgTR, { bus: v === "1" });
+  tog(svgTR, "bus", "z", n === 0); tog(svgTR, "bus", "conflict", clash);
+  const bv = $("[data-busv]", svgTR); bv.textContent = `BUS = ${v}`;
+  bv.classList.toggle("on", v === "1"); bv.classList.toggle("bad", clash);
+  trPaint.forEach((p) => p());
+  if (n === 0) status("#tr-status", "아무도 구동하지 않음 → BUS = Z (high impedance, floating)");
+  else if (n === 1) status("#tr-status", `${tr.ce ? "CPU" : "메모리"}만 구동 → BUS = ${v}`);
+  else if (clash) status("#tr-status", "둘 다 구동 + 값이 다름 → 충돌 (VDD–GND 단락)", true);
+  else status("#tr-status", `둘 다 같은 값(${v})을 구동 → 지금은 괜찮지만 피해야 하는 상태`, true);
+}
+drawTR();
+
+let start = 7;
+try { const st = localStorage.getItem("seqsim-tab"); if (st !== null) start = +st; } catch (e) {}
+go(start >= 0 && start < 15 ? start : 7);
+</script>
+</body>
+</html>
